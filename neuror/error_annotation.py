@@ -1,5 +1,6 @@
 """Annotation errors on morphologies."""
 from functools import partial
+from copy import deepcopy
 import logging
 from neurom.check import neuron_checks as nc
 from neurom.apps.annotate import annotate
@@ -25,15 +26,23 @@ def annotate_single_morphology(morph_path):
     Returns:
         annotations to append to .asc file
         dict of error summary
+        dict with error data
     """
     neuron = load_neuron(morph_path)
     results = [checker(neuron) for checker in CHECKERS]
+
+    errors_markers = []
+    for result, setting in zip(results, CHECKERS.values()):
+        if not result.status:
+            _marker = deepcopy(setting)
+            _marker.update({"data": result.info})
+            errors_markers.append(_marker)
     summary = {
         setting["name"]: len(result.info)
         for result, setting in zip(results, CHECKERS.values())
         if result.info
     }
-    return annotate(results, CHECKERS.values()), summary
+    return annotate(results, CHECKERS.values()), summary, errors_markers
 
 
 def annotate_morphologies(morph_paths):
@@ -50,9 +59,11 @@ def annotate_morphologies(morph_paths):
     annotations = {}
     for morph_path in morph_paths:
         try:
-            annotations[str(morph_path)], summaries[str(morph_path)] = annotate_single_morphology(
-                morph_path
-            )
+            (
+                annotations[str(morph_path)],
+                summaries[str(morph_path)],
+                _,
+            ) = annotate_single_morphology(morph_path)
         except Exception as e:  # noqa, pylint: disable=broad-except
             L.warning("%s failed", morph_path)
             L.warning(e, exc_info=True)
